@@ -336,3 +336,253 @@ Not yet supported or still experimental:
 - Generated implementations do not include user source files.
 - Generated implementations do not copy user wrapper functions.
 - AI generation is limited to explicit holes.
+
+## Super-Fusion Status
+
+`super` is supposed to glue every language into one cursed toolchain.
+
+| Language / Runtime | Super-fused |
+| --- | --- |
+| C | ✅ |
+| Python | ✅ |
+| C++ | ✅ partial |
+| Rust | ❌ |
+| Java | ❌ |
+| JavaScript | ❌ |
+| TypeScript | ❌ |
+| Go | ❌ |
+| Zig | ❌ |
+| Swift | ❌ |
+| Kotlin | ❌ |
+| Scala | ❌ |
+| C# | ❌ |
+| F# | ❌ |
+| Objective-C | ❌ |
+| Objective-C++ | ❌ |
+| CUDA | ❌ |
+| HIP | ❌ |
+| OpenCL C | ❌ |
+| SYCL | ❌ |
+| Metal Shading Language | ❌ |
+| GLSL | ❌ |
+| HLSL | ❌ |
+| WGSL | ❌ |
+| ISPC | ❌ |
+| Fortran | ❌ |
+| Julia | ❌ |
+| R | ❌ |
+| MATLAB | ❌ |
+| Octave | ❌ |
+| Mathematica / Wolfram Language | ❌ |
+| Maple | ❌ |
+| SageMath | ❌ |
+| Scilab | ❌ |
+| Maxima | ❌ |
+| LINGO | ❌ |
+| GAMS | ❌ |
+| AMPL | ❌ |
+| MiniZinc | ❌ |
+| Modelica | ❌ |
+| Simulink | ❌ |
+| LabVIEW | ❌ |
+| SQL | ❌ |
+| PL/pgSQL | ❌ |
+| T-SQL | ❌ |
+| PL/SQL | ❌ |
+| MySQL Stored Programs | ❌ |
+| SQLite SQL | ❌ |
+| SPARQL | ❌ |
+| Cypher | ❌ |
+| Datalog | ❌ |
+| Prolog | ❌ |
+| Mercury | ❌ |
+| Erlang | ❌ |
+| Elixir | ❌ |
+| Gleam | ❌ |
+| Haskell | ❌ |
+| OCaml | ❌ |
+| Standard ML | ❌ |
+| F* | ❌ |
+| Coq / Gallina | ❌ |
+| Lean | ❌ |
+| Agda | ❌ |
+| Idris | ❌ |
+| Futhark | ❌ |
+| Elm | ❌ |
+| PureScript | ❌ |
+| ReasonML | ❌ |
+| ReScript | ❌ |
+| Clojure | ❌ |
+| Common Lisp | ❌ |
+| Scheme | ❌ |
+| Racket | ❌ |
+| Guile | ❌ |
+| Emacs Lisp | ❌ |
+| AutoLISP | ❌ |
+| Lua | ❌ |
+| Ruby | ❌ |
+| PHP | ❌ |
+| Perl | ❌ |
+| Raku | ❌ |
+| Tcl | ❌ |
+| Groovy | ❌ |
+| Dart | ❌ |
+| CoffeeScript | ❌ |
+| LiveScript | ❌ |
+| JSX | ❌ |
+| TSX | ❌ |
+| WebAssembly | ❌ |
+| WebAssembly Text / WAT | ❌ |
+| Bash | ❌ |
+| Zsh | ❌ |
+| Fish | ❌ |
+| POSIX sh | ❌ |
+| PowerShell | ❌ |
+| Batch / CMD | ❌ |
+| VBScript | ❌ |
+| AppleScript | ❌ |
+| AutoHotkey | ❌ |
+| Make | ❌ |
+| CMake | ❌ |
+| Meson DSL | ❌ |
+| Bazel Starlark | ❌ |
+| Ninja | ❌ |
+| Dockerfile | ❌ |
+| HCL / Terraform | ❌ |
+| Nix | ❌ |
+| Dhall | ❌ |
+| Jsonnet | ❌ |
+| YAML | ❌ |
+| TOML | ❌ |
+| JSON | ❌ |
+| XML | ❌ |
+| HTML | ❌ |
+| CSS | ❌ |
+| Sass / SCSS | ❌ |
+| Less | ❌ |
+| Regex | ❌ |
+| AWK | ❌ |
+| sed | ❌ |
+| M4 | ❌ |
+| Vala | ❌ |
+| Nim | ❌ |
+| Crystal | ❌ |
+| D | ❌ |
+| V | ❌ |
+| Odin | ❌ |
+| Jai | ❌ |
+| Carbon | ❌ |
+| Mojo | ❌ |
+| Chapel | ❌ |
+| Pony | ❌ |
+| Red | ❌ |
+| Ring | ❌ |
+| Hack | ❌ |
+| Haxe | ❌ |
+| Fantom | ❌ |
+| Eiffel | ❌ |
+| Ada | ❌ |
+| SPARK | ❌ |
+| Pascal | ❌ |
+| Delphi / Object Pascal | ❌ |
+| Free Pascal | ❌ |
+| Modula-2 | ❌ |
+| Modula-3 | ❌ |
+| Oberon | ❌ |
+| BASIC | ❌ |
+| Visual Basic | ❌ |
+| VB.NET | ❌ |
+| QBasic | ❌ |
+| FreeBASIC | ❌ |
+| COBOL | ❌ |
+| RPG | ❌ |
+| JCL | ❌ |
+| AdaScript | ❌ |
+| Assembly | ❌ |
+| x86 Assembly | ❌ |
+| ARM Assembly | ❌ |
+| RISC-V Assembly | ❌ |
+| LLVM IR | ❌ |
+| MLIR | ❌ |
+| Verilog | ❌ |
+| SystemVerilog | ❌ |
+| VHDL | ❌ |
+| Chisel | ❌ |
+| Bluespec | ❌ |
+| FIRRTL | ❌ |
+| Q# | ❌ |
+| OpenQASM | ❌ |
+| Cirq | ❌ |
+| Qiskit circuits | ❌ |
+| Solidity | ❌ |
+| Vyper | ❌ |
+| Move | ❌ |
+| Cairo | ❌ |
+| Michelson | ❌ |
+| Clarity | ❌ |
+| Plutus | ❌ |
+| DAML | ❌ |
+| TeX | ❌ |
+| LaTeX | ❌ |
+| BibTeX | ❌ |
+| Typst | ❌ |
+| Markdown | ❌ |
+| reStructuredText | ❌ |
+| AsciiDoc | ❌ |
+| Graphviz DOT | ❌ |
+| Mermaid | ❌ |
+| PlantUML | ❌ |
+| G-code | ❌ |
+| PostScript | ❌ |
+| Processing | ❌ |
+| Arduino | ❌ |
+| Scratch | ❌ |
+| Blockly | ❌ |
+| Logo | ❌ |
+| Smalltalk | ❌ |
+| Self | ❌ |
+| Io | ❌ |
+| Forth | ❌ |
+| Factor | ❌ |
+| APL | ❌ |
+| J | ❌ |
+| K | ❌ |
+| Q / KDB+ | ❌ |
+| BQN | ❌ |
+| Uiua | ❌ |
+| Excel formulas | ❌ |
+| Google Sheets formulas | ❌ |
+| SAS | ❌ |
+| Stata | ❌ |
+| SPSS Syntax | ❌ |
+| ABAP | ❌ |
+| Apex | ❌ |
+| PeopleCode | ❌ |
+| Progress OpenEdge ABL | ❌ |
+| ColdFusion Markup Language | ❌ |
+| ActionScript | ❌ |
+| UnrealScript | ❌ |
+| GDScript | ❌ |
+| AngelScript | ❌ |
+| Squirrel | ❌ |
+| Ren'Py | ❌ |
+| Ink | ❌ |
+| Inform 7 | ❌ |
+| LLVM TableGen | ❌ |
+| ANTLR grammar | ❌ |
+| Tree-sitter grammar | ❌ |
+| Yacc / Bison | ❌ |
+| Lex / Flex | ❌ |
+| Brainfuck | ❌ |
+| Ook! | ❌ |
+| Befunge | ❌ |
+| Piet | ❌ |
+| Whitespace | ❌ |
+| INTERCAL | ❌ |
+| LOLCODE | ❌ |
+| Shakespeare Programming Language | ❌ |
+| ArnoldC | ❌ |
+| Chef | ❌ |
+| Malbolge | ❌ |
+| SuperLang, a custom Turing-complete language that does not exist | ❌ |
+
