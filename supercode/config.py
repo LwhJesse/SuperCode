@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 import tomllib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 
@@ -51,11 +51,23 @@ class SuperCodeConfig:
 
 
 @dataclass(slots=True)
+class ImplementationConfig:
+    name: str
+    language: str
+    source: str | None = None
+    symbol: str | None = None
+    library: str | None = None
+    header: str | None = None
+
+
+@dataclass(slots=True)
 class Config:
     llm: LLMConfig
     build: BuildConfig
     supercode: SuperCodeConfig
+    implementations: dict[str, ImplementationConfig] = field(default_factory=dict)
     config_path: Path | None = None
+    project_root: Path | None = None
 
 
 def _deep_update(base: dict, patch: dict) -> dict:
@@ -96,24 +108,52 @@ def _apply_env(data: dict) -> dict:
     return merged
 
 
+def _find_local_config(start: Path) -> Path | None:
+    candidate = start.resolve()
+    if candidate.is_file():
+        candidate = candidate.parent
+    for parent in [candidate, *candidate.parents]:
+        config_path = parent / "supercode.toml"
+        if config_path.exists():
+            return config_path
+    return None
+
+
 def load_config(cwd: Path | None = None) -> Config:
-    cwd = cwd or Path.cwd()
-    local_path = cwd / "supercode.toml"
+    cwd = (cwd or Path.cwd()).resolve()
+    cwd_dir = cwd.parent if cwd.is_file() else cwd
+    local_path = _find_local_config(cwd)
     home_path = Path.home() / ".config" / "supercode" / "config.toml"
 
     data: dict = tomllib.loads(DEFAULT_CONFIG)
     config_path = None
+    project_root = cwd_dir
     if home_path.exists():
         data = _deep_update(data, _load_toml(home_path))
         config_path = home_path
-    if local_path.exists():
+    if local_path is not None:
         data = _deep_update(data, _load_toml(local_path))
         config_path = local_path
+        project_root = local_path.parent.resolve()
     data = _apply_env(data)
 
     llm_data = data.get("llm", {})
     build_data = data.get("build", {})
     supercode_data = data.get("supercode", {})
+    implementations_data = data.get("implementations", {})
+    implementations: dict[str, ImplementationConfig] = {}
+    for name, item in implementations_data.items():
+        if not isinstance(item, dict):
+            continue
+        implementations[name] = ImplementationConfig(
+            name=name,
+            language=str(item.get("language", "")),
+            source=item.get("source"),
+            symbol=item.get("symbol"),
+            library=item.get("library"),
+            header=item.get("header"),
+        )
+
     return Config(
         llm=LLMConfig(
             provider=llm_data.get("provider", "deepseek"),
@@ -131,7 +171,9 @@ def load_config(cwd: Path | None = None) -> Config:
             workdir=supercode_data.get("workdir", ".supercode"),
             keep_impl=bool(supercode_data.get("keep_impl", True)),
         ),
+        implementations=implementations,
         config_path=config_path,
+        project_root=project_root,
     )
 
 

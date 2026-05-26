@@ -112,30 +112,13 @@ def _find_enclosing_function(line: int, functions: list[FunctionContext]) -> Fun
     return sorted(candidates, key=lambda fn: (fn.end_line - fn.start_line, fn.start_line))[0]
 
 
-def _collect_intent(lines: list[str], line_index: int) -> str:
+def _collect_comment(lines: list[str], line_index: int, marker: str) -> str:
     comments: list[str] = []
     current = line_index - 1
     while current >= 0:
         stripped = lines[current].strip()
-        if stripped.startswith("//"):
-            comments.append(stripped[2:].strip())
-            current -= 1
-            continue
-        if stripped == "":
-            current -= 1
-            continue
-        break
-    comments.reverse()
-    return " ".join(comments)
-
-
-def _collect_python_intent(lines: list[str], line_index: int) -> str:
-    comments: list[str] = []
-    current = line_index - 1
-    while current >= 0:
-        stripped = lines[current].strip()
-        if stripped.startswith("#"):
-            comments.append(stripped[1:].strip())
+        if stripped.startswith(marker):
+            comments.append(stripped[len(marker) :].strip())
             current -= 1
             continue
         if stripped == "":
@@ -156,7 +139,7 @@ def _hole_hash(
 ) -> str:
     basis = "|".join(
         [
-            str(source_file),
+            str(source_file.resolve()),
             str(line),
             str(column),
             enclosing_function or "",
@@ -191,6 +174,45 @@ def _scan_python_file(path: Path, text: str, source_hash: str) -> ScanResult:
             self.stack: list[ast.FunctionDef | ast.AsyncFunctionDef] = []
 
         def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+            exported = any(
+                isinstance(decorator, ast.Attribute) and decorator.attr == "super_export"
+                for decorator in node.decorator_list
+            )
+            if exported:
+                holes.append(
+                    Hole(
+                        kind="python_export_func",
+                        language="python",
+                        source_file=path,
+                        line=node.lineno,
+                        column=node.col_offset + 1,
+                        intent=_collect_comment(lines, node.lineno - 1, "#"),
+                        source_hash=source_hash,
+                        hole_hash=_hole_hash(
+                            path,
+                            node.lineno,
+                            node.col_offset + 1,
+                            node.name,
+                            "python_export_func",
+                            [
+                                node.name,
+                                _annotation_text(node.returns),
+                                *(
+                                    f"{_annotation_text(arg.annotation)}:{arg.arg}"
+                                    for arg in node.args.args
+                                ),
+                            ],
+                        ),
+                        enclosing_function=node.name,
+                        return_type=_annotation_text(node.returns),
+                        typed_params=[
+                            FunctionParam(type_text=_annotation_text(arg.annotation), name=arg.arg)
+                            for arg in node.args.args
+                        ],
+                        exported_name=node.name,
+                        generated_symbol=node.name,
+                    )
+                )
             self.stack.append(node)
             self.generic_visit(node)
             self.stack.pop()
@@ -237,7 +259,7 @@ def _scan_python_file(path: Path, text: str, source_hash: str) -> ScanResult:
                         source_file=path,
                         line=node.lineno,
                         column=node.col_offset + 1,
-                        intent=_collect_python_intent(lines, node.lineno - 1),
+                        intent=_collect_comment(lines, node.lineno - 1, "#"),
                         source_hash=source_hash,
                         hole_hash=hole_hash,
                         enclosing_function=enclosing.name,
@@ -245,6 +267,32 @@ def _scan_python_file(path: Path, text: str, source_hash: str) -> ScanResult:
                         args=arg_texts,
                         typed_params=typed_params,
                         generated_symbol=symbol,
+                    )
+                )
+            elif isinstance(node.func, ast.Attribute) and node.func.attr == "import_func":
+                if not node.args or not isinstance(node.args[0], ast.Constant) or not isinstance(node.args[0].value, str):
+                    raise ValueError(f"import_func at {path}:{node.lineno} requires a string export name")
+                imported_name = node.args[0].value
+                hole_hash = _hole_hash(
+                    path,
+                    node.lineno,
+                    node.col_offset + 1,
+                    None,
+                    "import_func",
+                    [imported_name],
+                )
+                holes.append(
+                    Hole(
+                        kind="import_func",
+                        language="python",
+                        source_file=path,
+                        line=node.lineno,
+                        column=node.col_offset + 1,
+                        intent="",
+                        source_hash=source_hash,
+                        hole_hash=hole_hash,
+                        imported_name=imported_name,
+                        generated_symbol=imported_name,
                     )
                 )
             self.generic_visit(node)
@@ -285,7 +333,7 @@ def _scan_super_func(
         source_file=source_file,
         line=line,
         column=column,
-        intent=_collect_intent(lines, line - 1),
+        intent=_collect_comment(lines, line - 1, "//"),
         source_hash=source_hash,
         hole_hash=hole_hash,
         enclosing_function=enclosing.name,
@@ -296,7 +344,8 @@ def _scan_super_func(
     )
 
 
-def _scan_export_func(
+def _scan_named_func(
+    kind: str,
     match: re.Match[str],
     text: str,
     lines: list[str],
@@ -306,30 +355,31 @@ def _scan_export_func(
 ) -> Hole:
     line = _line_number(text, match.start())
     column = _col_number(text, match.start())
-    exported_name = match.group("name").strip()
+    name = match.group("name").strip()
     return_type = match.group("return").strip()
-    typed_params = _parse_params(match.group("params"))
+    typed_params = _parse_params(match.group("params") or "")
     hole_hash = _hole_hash(
         source_file,
         line,
         column,
         None,
-        "export_func",
-        [exported_name, return_type, *(f"{p.type_text}:{p.name}" for p in typed_params)],
+        kind,
+        [name, return_type, *(f"{p.type_text}:{p.name}" for p in typed_params)],
     )
     return Hole(
-        kind="export_func",
+        kind=kind,  # type: ignore[arg-type]
         language=language,  # type: ignore[arg-type]
         source_file=source_file,
         line=line,
         column=column,
-        intent=_collect_intent(lines, line - 1),
+        intent=_collect_comment(lines, line - 1, "//"),
         source_hash=source_hash,
         hole_hash=hole_hash,
         return_type=return_type,
         typed_params=typed_params,
-        exported_name=exported_name,
-        generated_symbol=exported_name,
+        exported_name=name if kind == "export_func" else None,
+        imported_name=name if kind == "import_func" else None,
+        generated_symbol=name,
     )
 
 
@@ -352,7 +402,7 @@ def _scan_named_type(
         source_file=source_file,
         line=line,
         column=column,
-        intent=_collect_intent(lines, line - 1),
+        intent=_collect_comment(lines, line - 1, "//"),
         source_hash=source_hash,
         hole_hash=hole_hash,
         type_name=type_name,
@@ -361,7 +411,7 @@ def _scan_named_type(
 
 
 def scan_file(source_file: str | Path) -> ScanResult:
-    path = Path(source_file)
+    path = Path(source_file).resolve()
     text = path.read_text(encoding="utf-8")
     if path.suffix in {".cpp", ".cc", ".cxx"}:
         language = "cpp"
@@ -372,9 +422,9 @@ def scan_file(source_file: str | Path) -> ScanResult:
     source_hash = _sha256_text(text)
     if language == "python":
         return _scan_python_file(path, text, source_hash)
+
     lines = text.splitlines()
     functions = _extract_functions(text)
-
     holes: list[Hole] = []
     for match in re.finditer(r"super_func\s*\(\s*(?P<return>[^,]+)\s*,\s*(?P<args>[^)]*)\)", text):
         holes.append(_scan_super_func(match, text, lines, path, language, source_hash, functions))
@@ -382,7 +432,12 @@ def scan_file(source_file: str | Path) -> ScanResult:
         r"super_export_func\s*\(\s*(?P<name>[A-Za-z_]\w*)\s*,\s*(?P<return>[^,]+)\s*(?:,\s*(?P<params>[^)]*))?\)",
         text,
     ):
-        holes.append(_scan_export_func(match, text, lines, path, language, source_hash))
+        holes.append(_scan_named_func("export_func", match, text, lines, path, language, source_hash))
+    for match in re.finditer(
+        r"super_import_func\s*\(\s*(?P<name>[A-Za-z_]\w*)\s*,\s*(?P<return>[^,]+)\s*(?:,\s*(?P<params>[^)]*))?\)",
+        text,
+    ):
+        holes.append(_scan_named_func("import_func", match, text, lines, path, language, source_hash))
     for match in re.finditer(r"super_struct\s*\(\s*(?P<name>[A-Za-z_]\w*)\s*\)", text):
         holes.append(_scan_named_type("struct", match, text, lines, path, language, source_hash))
     for match in re.finditer(r"super_class\s*\(\s*(?P<name>[A-Za-z_]\w*)\s*\)", text):

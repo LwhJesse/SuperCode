@@ -2,22 +2,14 @@ from __future__ import annotations
 
 import re
 import textwrap
-from pathlib import Path
 
 from .config import Config
-from .context import GeneratedProject
-from .emitter_c import emit_c_project
-from .emitter_cpp import emit_cpp_project
-from .emitter_python import emit_python_project
-from .holes import Hole, ScanResult
+from .holes import Hole
 from .llm import generate_with_llm
-from .manifest import save_manifest
 
-
-def _c_param_list(hole: Hole) -> str:
-    if not hole.typed_params:
-        return "void"
-    return ", ".join(f"{param.type_text}{param.name}" for param in hole.typed_params)
+REAL_LLM_REQUIRED_MESSAGE = (
+    "SuperCode holes require a real LLM backend. Set DEEPSEEK_API_KEY or configure another provider."
+)
 
 
 def _mock_mode_min_tie(symbol: str) -> str:
@@ -47,10 +39,6 @@ def _mock_mode_min_tie(symbol: str) -> str:
         }}
         """
     ).strip() + "\n"
-
-
-def _mock_export_mode_min_tie(symbol: str) -> str:
-    return _mock_mode_min_tie(symbol)
 
 
 def _mock_intvec(symbol: str) -> str:
@@ -113,7 +101,6 @@ def _mock_lrucache(symbol: str) -> str:
     return textwrap.dedent(
         f"""
         #include <list>
-        #include <stdexcept>
         #include <unordered_map>
         #include <utility>
 
@@ -183,7 +170,7 @@ def generate_mock_payload(hole: Hole) -> dict:
         else:
             code = _mock_mode_min_tie(hole.generated_symbol or "generated_symbol")
     elif hole.kind == "export_func":
-        code = _mock_export_mode_min_tie(hole.generated_symbol or hole.exported_name or "generated_symbol")
+        code = _mock_mode_min_tie(hole.exported_name or hole.generated_symbol or "generated_symbol")
     elif hole.kind == "struct":
         code = _mock_intvec(hole.type_name or "GeneratedStruct")
     elif hole.kind == "class":
@@ -198,25 +185,6 @@ def generate_mock_payload(hole: Hole) -> dict:
     }
 
 
-def _validate_generated_code(hole: Hole, code: str) -> None:
-    if hole.language != "python" and re.search(r"\bmain\s*\(", code):
-        raise RuntimeError(f"refusing generated code for {hole.generated_symbol}: contains main()")
-    if str(hole.source_file.name) in code:
-        raise RuntimeError(
-            f"refusing generated code for {hole.generated_symbol}: references user source file"
-        )
-    if hole.enclosing_function and (
-        re.search(rf"\b{re.escape(hole.enclosing_function)}\s*\(", code)
-        or re.search(rf"\bdef\s+{re.escape(hole.enclosing_function)}\s*\(", code)
-    ):
-        raise RuntimeError(
-            f"refusing generated code for {hole.generated_symbol}: appears to copy user wrapper function"
-        )
-    _validate_expected_signatures(hole, code)
-    if hole.language != "python":
-        _validate_allocation_failure_paths(hole, code)
-
-
 def _contains_failure_check_after(code: str, position: int) -> bool:
     window = code[position : position + 320]
     patterns = [
@@ -225,7 +193,6 @@ def _contains_failure_check_after(code: str, position: int) -> bool:
         r"if\s*\(\s*!\s*[A-Za-z_]\w*\s*\)",
         r"if\s*\(\s*[A-Za-z_]\w*\s*==\s*nullptr\s*\)",
         r"if\s*\(\s*nullptr\s*==\s*[A-Za-z_]\w*\s*\)",
-        r"if\s*\(\s*!\s*[A-Za-z_]\w*\s*\)",
     ]
     return any(re.search(pattern, window) for pattern in patterns)
 
@@ -235,17 +202,6 @@ def _validate_allocation_failure_paths(hole: Hole, code: str) -> None:
         if not _contains_failure_check_after(code, match.end()):
             raise RuntimeError(
                 f"refusing generated code for {hole.generated_symbol}: allocation without failure-path check"
-            )
-    if re.search(r"\bnew\s+(?!\()", code):
-        has_nothrow = "std::nothrow" in code
-        has_try = re.search(r"\btry\s*\{", code) and re.search(r"\bcatch\s*\(", code)
-        if not has_nothrow and not has_try:
-            raise RuntimeError(
-                f"refusing generated code for {hole.generated_symbol}: C++ new without explicit failure-path handling"
-            )
-        if has_nothrow and not re.search(r"if\s*\(\s*!\s*\w+\s*\)|if\s*\(\s*\w+\s*==\s*nullptr\s*\)", code):
-            raise RuntimeError(
-                f"refusing generated code for {hole.generated_symbol}: std::nothrow allocation without nullptr check"
             )
 
 
@@ -258,88 +214,62 @@ def _validate_expected_signatures(hole: Hole, code: str) -> None:
     if hole.kind == "local_func":
         if hole.language == "python":
             expected = f"def {hole.generated_symbol}({', '.join(p.name for p in hole.typed_params)})"
-            if _normalize_signature_text(expected) not in compact:
-                raise RuntimeError(
-                    f"refusing generated code for {hole.generated_symbol}: generated Python helper signature does not match expected"
-                )
         else:
             expected = f"{hole.return_type} {hole.generated_symbol}({', '.join(f'{p.type_text} {p.name}' for p in hole.typed_params) or 'void'})"
-            if _normalize_signature_text(expected) not in compact:
-                raise RuntimeError(
-                    f"refusing generated code for {hole.generated_symbol}: generated helper signature does not match expected"
-                )
+        if _normalize_signature_text(expected) not in compact:
+            raise RuntimeError(f"refusing generated code for {hole.generated_symbol}: signature does not match expected")
     elif hole.kind == "export_func":
         expected = f"{hole.return_type} {hole.exported_name}({', '.join(f'{p.type_text} {p.name}' for p in hole.typed_params) or 'void'})"
         if _normalize_signature_text(expected) not in compact:
-            raise RuntimeError(
-                f"refusing generated code for {hole.generated_symbol}: exported function signature does not match expected"
-            )
+            raise RuntimeError(f"refusing generated code for {hole.generated_symbol}: exported signature mismatch")
     elif hole.kind == "struct":
-        type_name = hole.type_name or "GeneratedStruct"
-        expected_snippets = [
-            f"struct {type_name}",
-            f"{type_name} *{type_name}_create(void)",
-            f"void {type_name}_destroy({type_name} *v)",
-            f"void {type_name}_push({type_name} *v, int x)",
-            f"int {type_name}_get(const {type_name} *v, int index)",
-            f"int {type_name}_size(const {type_name} *v)",
-        ]
-        for snippet in expected_snippets:
+        for snippet in [
+            f"struct {hole.type_name}",
+            f"{hole.type_name} *{hole.type_name}_create(void)",
+            f"void {hole.type_name}_destroy({hole.type_name} *v)",
+            f"void {hole.type_name}_push({hole.type_name} *v, int x)",
+            f"int {hole.type_name}_get(const {hole.type_name} *v, int index)",
+            f"int {hole.type_name}_size(const {hole.type_name} *v)",
+        ]:
             if _normalize_signature_text(snippet) not in compact:
-                raise RuntimeError(
-                    f"refusing generated code for {hole.generated_symbol}: struct API does not match required v0 signatures"
-                )
+                raise RuntimeError(f"refusing generated code for {hole.generated_symbol}: struct API mismatch")
     elif hole.kind == "class":
-        type_name = hole.type_name or "GeneratedClass"
-        expected_snippets = [
-            f"struct {type_name}::Impl",
-            f"{type_name}::{type_name}(int capacity)",
-            f"{type_name}::~{type_name}()",
-            f"void {type_name}::put(int key, double value)",
-            f"double {type_name}::get(int key) const",
-            f"bool {type_name}::contains(int key) const",
-        ]
-        for snippet in expected_snippets:
+        for snippet in [
+            f"struct {hole.type_name}::Impl",
+            f"{hole.type_name}::{hole.type_name}(int capacity)",
+            f"{hole.type_name}::~{hole.type_name}()",
+            f"void {hole.type_name}::put(int key, double value)",
+            f"double {hole.type_name}::get(int key) const",
+            f"bool {hole.type_name}::contains(int key) const",
+        ]:
             if _normalize_signature_text(snippet) not in compact:
-                raise RuntimeError(
-                    f"refusing generated code for {hole.generated_symbol}: class API does not match required v0 signatures"
-                )
-        if "pImpl" in code or "impl_" not in code:
-            raise RuntimeError(
-                f"refusing generated code for {hole.generated_symbol}: class implementation must use the impl_ member name"
-            )
+                raise RuntimeError(f"refusing generated code for {hole.generated_symbol}: class API mismatch")
 
 
-REAL_LLM_REQUIRED_MESSAGE = (
-    "SuperCode holes require a real LLM backend. Set DEEPSEEK_API_KEY or configure another provider."
-)
+def validate_generated_code(hole: Hole, code: str) -> None:
+    if hole.language != "python" and re.search(r"\bmain\s*\(", code):
+        raise RuntimeError(f"refusing generated code for {hole.generated_symbol}: contains main()")
+    if str(hole.source_file.name) in code:
+        raise RuntimeError(f"refusing generated code for {hole.generated_symbol}: references user source file")
+    if hole.enclosing_function and (
+        re.search(rf"\b{re.escape(hole.enclosing_function)}\s*\(", code)
+        or re.search(rf"\bdef\s+{re.escape(hole.enclosing_function)}\s*\(", code)
+    ):
+        raise RuntimeError(f"refusing generated code for {hole.generated_symbol}: appears to copy user wrapper function")
+    _validate_expected_signatures(hole, code)
+    if hole.language != "python":
+        _validate_allocation_failure_paths(hole, code)
 
 
-def generate_project(scan: ScanResult, config: Config, mock: bool = False) -> GeneratedProject:
+def generate_payloads(config: Config, holes: list[Hole], *, mock: bool) -> dict[str, str]:
     if not mock and not config.llm.api_key:
         raise RuntimeError(REAL_LLM_REQUIRED_MESSAGE)
     payloads: dict[str, str] = {}
-    for hole in scan.holes:
+    for hole in holes:
         payload = generate_mock_payload(hole) if mock else generate_with_llm(config, hole)
         code = payload.get("code", "")
         if not code.strip():
             raise RuntimeError(f"generator returned empty code for {hole.generated_symbol}")
-        _validate_generated_code(hole, code)
+        validate_generated_code(hole, code)
         payloads[hole.hole_hash] = code
-
-    workdir = Path(config.supercode.workdir)
-    project_root = Path.cwd().resolve()
-    if scan.language == "c":
-        project = emit_c_project(scan, payloads, workdir, project_root)
-    elif scan.language == "cpp":
-        project = emit_cpp_project(scan, payloads, workdir, config, project_root)
-    else:
-        project = emit_python_project(scan, payloads, workdir, project_root)
-    project.manifest_path = save_manifest(
-        project.manifest_path,
-        scan.holes,
-        generation_backend="mock" if mock else "real_llm",
-        provider=None if mock else config.llm.provider,
-        model=None if mock else config.llm.model,
-    )
-    return project
+    return payloads

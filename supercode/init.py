@@ -17,7 +17,7 @@ from .paths import (
 )
 from .scanner import scan_file
 
-SCAN_SUFFIXES = {".c", ".cpp", ".cc", ".cxx"}
+SCAN_SUFFIXES = {".c", ".cpp", ".cc", ".cxx", ".py"}
 IGNORED_DIRS = {".git", ".supercode", "build", "dist", "__pycache__"}
 
 
@@ -77,9 +77,10 @@ def _render_ide_header(holes: list[Hole]) -> str:
     class_lines: list[str] = []
 
     for hole in holes:
-        if hole.kind == "export_func" and hole.exported_name and hole.return_type:
+        if hole.kind in {"export_func", "import_func"} and (hole.exported_name or hole.imported_name) and hole.return_type:
+            name = hole.exported_name or hole.imported_name
             export_lines.append(
-                f"{hole.return_type} {hole.exported_name}({_render_c_signature(hole.return_type, hole.typed_params)});"
+                f"{hole.return_type} {name}({_render_c_signature(hole.return_type, hole.typed_params)});"
             )
         elif hole.kind == "struct" and hole.type_name:
             name = hole.type_name

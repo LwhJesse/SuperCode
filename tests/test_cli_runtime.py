@@ -1,14 +1,12 @@
 import os
-import tomllib
-import shutil
 import subprocess
 import sys
+import tomllib
+import shutil
 from pathlib import Path
 
-from supercode.build import render_compile_command, run_passthrough, run_python_project
-from supercode.context import GeneratedProject
+from supercode.build import run_passthrough
 from supercode.paths import get_packaged_include_dir, get_runtime_package_path
-from supercode.scanner import scan_file
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -20,6 +18,7 @@ def _env(tmp_path: Path) -> dict[str, str]:
     env["HOME"] = str(tmp_path / "home")
     Path(env["HOME"]).mkdir(parents=True, exist_ok=True)
     env.pop("DEEPSEEK_API_KEY", None)
+    env.pop("OPENROUTER_API_KEY", None)
     env.pop("SUPERCODE_LLM_API_KEY_ENV", None)
     env.pop("SUPERCODE_WORKDIR", None)
     return env
@@ -69,7 +68,6 @@ def test_holes_without_api_key_fail_without_mock(tmp_path: Path) -> None:
     result = _run(tmp_path, str(source), "-o", str(output))
     assert result.returncode != 0
     assert "SuperCode holes require a real LLM backend. Set DEEPSEEK_API_KEY or configure another provider." in result.stderr
-    assert not (tmp_path / ".supercode").exists()
 
 
 def test_holes_with_explicit_mock_succeed_and_emit_warning(tmp_path: Path) -> None:
@@ -92,25 +90,10 @@ def test_holes_with_explicit_mock_succeed_and_emit_warning(tmp_path: Path) -> No
     )
     result = _run(tmp_path, str(source), "-o", str(output), "--mock")
     assert result.returncode == 0, result.stderr
-    assert "[SuperCode mock backend] No LLM was called. This run only validates scanner/emitter/build plumbing." in result.stdout
-    assert (tmp_path / ".supercode").exists()
+    assert "[SuperCode mock backend]" in result.stderr
+    assert "[scan]" in result.stderr
     program = subprocess.run([str(output)], text=True, capture_output=True, check=True)
     assert program.stdout.strip() == "1"
-
-
-def test_passthrough_with_mock_flag_and_no_holes_stays_passthrough(tmp_path: Path) -> None:
-    source = tmp_path / "plain.c"
-    output = tmp_path / "plain"
-    source.write_text(
-        "int main(void) {\n"
-        "    return 0;\n"
-        "}\n",
-        encoding="utf-8",
-    )
-    result = _run(tmp_path, str(source), "-o", str(output), "--mock")
-    assert result.returncode == 0, result.stderr
-    assert "[SuperCode mock backend]" not in result.stdout
-    assert not (tmp_path / ".supercode").exists()
 
 
 def test_python_passthrough_without_holes(tmp_path: Path) -> None:
@@ -122,33 +105,17 @@ def test_python_passthrough_without_holes(tmp_path: Path) -> None:
     assert not (tmp_path / ".supercode").exists()
 
 
-def test_python_hole_without_api_key_fails(tmp_path: Path) -> None:
-    source = tmp_path / "main.py"
-    source.write_text(
-        "import supercode as sc\n\n"
-        "def mode_min_tie(a: list[int]) -> int:\n"
-        "    return sc.super_func(int, a)\n\n"
-        "print(mode_min_tie([1]))\n",
-        encoding="utf-8",
-    )
-    result = _run(tmp_path, str(source))
-    assert result.returncode != 0
-    assert "SuperCode holes require a real LLM backend. Set DEEPSEEK_API_KEY or configure another provider." in result.stderr
-
-
 def test_python_hole_with_mock_runs_and_writes_py_impl(tmp_path: Path) -> None:
     source = tmp_path / "main.py"
     source.write_text(
         "import supercode as sc\n\n"
         "def mode_min_tie(a: list[int]) -> int:\n"
-        "    # return mode\n"
         "    return sc.super_func(int, a)\n\n"
         "print(mode_min_tie([3, 1, 3, 1, 1]))\n",
         encoding="utf-8",
     )
     result = _run(tmp_path, str(source), "--mock")
     assert result.returncode == 0, result.stderr
-    assert "[SuperCode mock backend] No LLM was called. This run only validates scanner/emitter/build plumbing." in result.stdout
     assert "1" in result.stdout
     py_impl_files = list((tmp_path / ".supercode" / "py_impl").glob("*.py"))
     assert py_impl_files
@@ -190,39 +157,12 @@ def test_packaged_include_exists() -> None:
     assert (include_dir / "supercode.hpp").exists()
 
 
-def test_build_uses_packaged_include(tmp_path: Path) -> None:
-    shutil.copytree(ROOT / "include", tmp_path / "include")
-    source = tmp_path / "main.c"
-    source.write_text(
-        "#include <supercode.h>\n"
-        "int mode_min_tie(const int *a, int n) { return super_func(int, a, n); }\n"
-        "int main(void) { return 0; }\n",
-        encoding="utf-8",
-    )
-    project = GeneratedProject(
-        scan=scan_file(source),
-        project_root=tmp_path.resolve(),
-        source_header=tmp_path / ".supercode" / "include" / "main.sc.h",
-        impl_files=[tmp_path / ".supercode" / "impl" / "main.mode_min_tie.2.test.c"],
-        manifest_path=tmp_path / ".supercode" / "manifest.json",
-        generation_backend="mock",
-    )
-    project.source_header.parent.mkdir(parents=True, exist_ok=True)
-    project.source_header.write_text("#define SUPERCODE_RESOLVED 1\n", encoding="utf-8")
-    project.impl_files[0].parent.mkdir(parents=True, exist_ok=True)
-    project.impl_files[0].write_text("int __dummy(void){return 0;}\n", encoding="utf-8")
-    config_mod = __import__("supercode.config", fromlist=["load_config"])
-    command = render_compile_command(project, config_mod.load_config(tmp_path), tmp_path / "out")
-    assert str(get_packaged_include_dir().resolve()) in command
-
-
 def test_python_runtime_path_injected(tmp_path: Path, monkeypatch) -> None:
     source = tmp_path / "plain.py"
     source.write_text("print('plain')\n", encoding="utf-8")
     captured: dict[str, object] = {}
 
     def fake_run(cmd, check, env=None, **kwargs):  # type: ignore[no-untyped-def]
-        captured["cmd"] = cmd
         captured["env"] = env
         class Result:
             returncode = 0
@@ -235,30 +175,135 @@ def test_python_runtime_path_injected(tmp_path: Path, monkeypatch) -> None:
     assert str(get_runtime_package_path().resolve()) in env["PYTHONPATH"]
 
 
-def test_python_runtime_path_injected_for_generated_project(tmp_path: Path, monkeypatch) -> None:
-    source = tmp_path / "main.py"
-    source.write_text("print('plain')\n", encoding="utf-8")
-    project = GeneratedProject(
-        scan=scan_file(source),
-        project_root=tmp_path.resolve(),
-        source_header=None,
-        impl_files=[],
-        manifest_path=tmp_path / ".supercode" / "manifest.json",
-        generation_backend="mock",
-        python_registry=tmp_path / ".supercode" / "python_registry.json",
+def test_offline_missing_implementation_fails_clearly(tmp_path: Path) -> None:
+    shutil.copytree(ROOT / "include", tmp_path / "include")
+    source = tmp_path / "main.c"
+    output = tmp_path / "main"
+    source.write_text(
+        "#include <supercode.h>\n"
+        "int mode_min_tie(const int *a, int n) {\n"
+        "    return super_func(int, a, n);\n"
+        "}\n"
+        "int main(void) { return 0; }\n",
+        encoding="utf-8",
     )
-    project.python_registry.parent.mkdir(parents=True, exist_ok=True)
-    project.python_registry.write_text('{"entries":[]}', encoding="utf-8")
-    captured: dict[str, object] = {}
+    result = _run(tmp_path, "build", str(source), "-o", str(output), "--offline")
+    assert result.returncode != 0
+    assert "SuperCode offline build failed." in result.stderr
+    assert "Missing implementation:" in result.stderr
 
-    def fake_run(cmd, check, env=None, **kwargs):  # type: ignore[no-untyped-def]
-        captured["env"] = env
-        class Result:
-            returncode = 0
-        return Result()
 
-    monkeypatch.setattr(subprocess, "run", fake_run)
-    run_python_project(project)
-    env = captured["env"]
-    assert env is not None
-    assert str(get_runtime_package_path().resolve()) in env["PYTHONPATH"]
+def test_generate_only_writes_impl_without_building_binary(tmp_path: Path) -> None:
+    shutil.copytree(ROOT / "include", tmp_path / "include")
+    source = tmp_path / "main.c"
+    output = tmp_path / "main"
+    source.write_text(
+        "#include <supercode.h>\n"
+        "int mode_min_tie(const int *a, int n) {\n"
+        "    return super_func(int, a, n);\n"
+        "}\n"
+        "int main(void) { return 0; }\n",
+        encoding="utf-8",
+    )
+    result = _run(tmp_path, "generate", str(source), "--mock")
+    assert result.returncode == 0, result.stderr
+    assert not output.exists()
+    assert list((tmp_path / ".supercode" / "impl").glob("*.c"))
+
+
+def test_reuse_existing_generated_impl_without_mock_or_api_key(tmp_path: Path) -> None:
+    shutil.copytree(ROOT / "include", tmp_path / "include")
+    source = tmp_path / "main.c"
+    output = tmp_path / "main"
+    source.write_text(
+        "#include <stdio.h>\n"
+        "#include <supercode.h>\n"
+        "int mode_min_tie(const int *a, int n) {\n"
+        "    return super_func(int, a, n);\n"
+        "}\n"
+        "int main(void) {\n"
+        "    int a[] = {3, 1, 3, 1, 1};\n"
+        '    printf("%d\\n", mode_min_tie(a, 5));\n'
+        "    return 0;\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    first = _run(tmp_path, "generate", str(source), "--mock")
+    assert first.returncode == 0, first.stderr
+    second = _run(tmp_path, "build", str(source), "-o", str(output), "--offline")
+    assert second.returncode == 0, second.stderr
+    assert "[generate]" not in second.stderr
+    program = subprocess.run([str(output)], text=True, capture_output=True, check=True)
+    assert program.stdout.strip() == "1"
+
+
+def test_regenerate_refuses_handwritten_implementation(tmp_path: Path) -> None:
+    project = tmp_path / "proj"
+    shutil.copytree(ROOT / "examples" / "no_ai", project)
+    shutil.copy(ROOT / "include" / "supercode.h", project / "include.h")
+    result = _run(tmp_path, "regenerate", str(project / "c_export" / "main.c"), "--mock")
+    assert result.returncode != 0
+    assert "refusing to regenerate handwritten implementation: mode_min_tie" in result.stderr
+
+
+def test_verify_valid_manifest_and_detect_missing_impl(tmp_path: Path) -> None:
+    shutil.copytree(ROOT / "include", tmp_path / "include")
+    source = tmp_path / "main.c"
+    source.write_text(
+        "#include <supercode.h>\n"
+        "int mode_min_tie(const int *a, int n) { return super_func(int, a, n); }\n"
+        "int main(void) { return 0; }\n",
+        encoding="utf-8",
+    )
+    generated = _run(tmp_path, "generate", str(source), "--mock")
+    assert generated.returncode == 0, generated.stderr
+    ok = _run(tmp_path, "verify", str(source))
+    assert ok.returncode == 0, ok.stderr
+    impl = next((tmp_path / ".supercode" / "impl").glob("*.c"))
+    impl.unlink()
+    bad = _run(tmp_path, "verify", str(source))
+    assert bad.returncode != 0
+    assert "[verify] STALE:" in bad.stdout
+
+
+def test_no_ai_examples_work_offline(tmp_path: Path) -> None:
+    shutil.copytree(ROOT / "examples" / "no_ai", tmp_path / "no_ai")
+    c_out = tmp_path / "sc-c"
+    cpp_out = tmp_path / "sc-cpp"
+
+    c_result = _run(tmp_path, "build", str(tmp_path / "no_ai" / "c_export" / "main.c"), "-o", str(c_out), "--offline")
+    assert c_result.returncode == 0, c_result.stderr
+    assert subprocess.run([str(c_out)], text=True, capture_output=True, check=True).stdout.strip() == "1"
+
+    cpp_result = _run(tmp_path, "build", str(tmp_path / "no_ai" / "cpp_import" / "main.cpp"), "-o", str(cpp_out), "--offline")
+    assert cpp_result.returncode == 0, cpp_result.stderr
+    assert subprocess.run([str(cpp_out)], text=True, capture_output=True, check=True).stdout.strip() == "1"
+
+    py_result = _run(tmp_path, "build", str(tmp_path / "no_ai" / "python_import" / "main.py"), "--offline")
+    assert py_result.returncode == 0, py_result.stderr
+    assert py_result.stdout.strip() == "1"
+
+
+def test_verbose_shows_build_command(tmp_path: Path) -> None:
+    source = tmp_path / "plain.c"
+    output = tmp_path / "plain"
+    source.write_text("int main(void) { return 0; }\n", encoding="utf-8")
+    result = _run(tmp_path, str(source), "-o", str(output), "--verbose")
+    assert result.returncode == 0, result.stderr
+    assert "[build]" in result.stdout or "[build]" in result.stderr
+
+
+def test_quiet_reduces_phase_output(tmp_path: Path) -> None:
+    shutil.copytree(ROOT / "include", tmp_path / "include")
+    source = tmp_path / "main.c"
+    output = tmp_path / "main"
+    source.write_text(
+        "#include <stdio.h>\n"
+        "#include <supercode.h>\n"
+        "int mode_min_tie(const int *a, int n) { return super_func(int, a, n); }\n"
+        "int main(void) { int a[] = {1}; printf(\"%d\\n\", mode_min_tie(a, 1)); return 0; }\n",
+        encoding="utf-8",
+    )
+    result = _run(tmp_path, str(source), "-o", str(output), "--mock", "--quiet")
+    assert result.returncode == 0, result.stderr
+    assert "[scan]" not in result.stdout

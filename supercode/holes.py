@@ -4,7 +4,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
-HoleKind = Literal["local_func", "export_func", "struct", "class"]
+HoleKind = Literal[
+    "local_func",
+    "export_func",
+    "import_func",
+    "struct",
+    "class",
+    "python_export_func",
+]
 Language = Literal["c", "cpp", "python"]
 
 
@@ -38,6 +45,7 @@ class Hole:
     args: list[str] = field(default_factory=list)
     typed_params: list[FunctionParam] = field(default_factory=list)
     exported_name: str | None = None
+    imported_name: str | None = None
     type_name: str | None = None
     generated_symbol: str | None = None
     impl_path: str | None = None

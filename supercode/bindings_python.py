@@ -50,11 +50,8 @@ def emit_python_binding(export_holes: list[Hole], output_path: Path, library_pat
 
 
 def maybe_build_export_library(config: Config, export_holes: list[Hole], impl_files: list[Path], output_path: Path) -> Path:
-    if not export_holes:
+    if not impl_files:
         return output_path
-    export_impls = [Path(hole.impl_path) for hole in export_holes if hole.impl_path]
-    if not export_impls:
-        return output_path
-    cmd = [config.build.cc, "-shared", "-fPIC", *[str(path) for path in export_impls], "-o", str(output_path)]
+    cmd = [config.build.cc, "-shared", "-fPIC", *[str(path) for path in impl_files], "-o", str(output_path)]
     subprocess.run(cmd, check=True)
     return output_path

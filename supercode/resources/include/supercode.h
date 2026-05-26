@@ -7,6 +7,10 @@
 #define super_export_func(name, return_type, ...) return_type name(__VA_ARGS__)
 #endif
 
+#ifndef super_import_func
+#define super_import_func(name, return_type, ...) return_type name(__VA_ARGS__)
+#endif
+
 #ifndef super_struct
 #define super_struct(name)
 #endif
@@ -23,6 +27,10 @@
 
 #ifndef super_export_func
 #define super_export_func(name, return_type, ...) return_type name(__VA_ARGS__)
+#endif
+
+#ifndef super_import_func
+#define super_import_func(name, return_type, ...) return_type name(__VA_ARGS__)
 #endif
 
 #ifndef super_struct

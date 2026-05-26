@@ -7,6 +7,10 @@
 #define super_class(name)
 #endif
 
+#ifndef super_import_func
+#define super_import_func(name, return_type, ...) extern "C" return_type name(__VA_ARGS__)
+#endif
+
 #else
 
 #ifndef SUPERCODE_RESOLVED
@@ -26,6 +30,10 @@
         struct Impl; \
         Impl* impl_; \
     }
+#endif
+
+#ifndef super_import_func
+#define super_import_func(name, return_type, ...) extern "C" return_type name(__VA_ARGS__)
 #endif
 
 #endif

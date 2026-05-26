@@ -5,6 +5,8 @@ SuperCode is an experimental AI hole-filling compiler/interpreter frontend.
 It does not rewrite your source code.
 It only fills explicit `super_func`, `super_export_func`, `super_struct`, and `super_class` holes, stores generated implementations under `.supercode/`, and links or imports them back through `super`.
 
+The fixed SuperCode v1 syntax and deterministic glue rules are documented in [docs/syntax.md](/home/jesse/code/SuperCode/docs/syntax.md).
+
 ## Warning
 
 - SuperCode is experimental.
@@ -585,4 +587,3 @@ Not yet supported or still experimental:
 | Chef | ❌ |
 | Malbolge | ❌ |
 | SuperLang, a custom Turing-complete language that does not exist | ❌ |
-

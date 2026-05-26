@@ -7,12 +7,14 @@ import inspect
 import json
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 __all__ = [
     "__version__",
     "super_func",
     "super_class",
+    "super_export",
+    "import_func",
     "load_registry",
     "is_runtime_ready",
 ]
@@ -37,6 +39,8 @@ def load_registry(path: str | os.PathLike[str] | None = None) -> dict[str, Any]:
     if not candidate.exists():
         raise RuntimeError(_RUNTIME_ERROR)
     data = json.loads(candidate.read_text(encoding="utf-8"))
+    if "entries" in data and "locals" not in data:
+        data = {"locals": data.get("entries", []), "exports": {}}
     if path is None:
         _REGISTRY_CACHE = data
     return data
@@ -77,7 +81,7 @@ def super_func(return_type: type, *args: Any) -> Any:
     function_name = caller.f_code.co_name
     line = caller.f_lineno
 
-    for entry in registry.get("entries", []):
+    for entry in registry.get("locals", []):
         if (
             entry.get("source_file") == filename
             and entry.get("enclosing_function") == function_name
@@ -87,6 +91,25 @@ def super_func(return_type: type, *args: Any) -> Any:
             helper = getattr(module, entry["generated_symbol"])
             return helper(*args)
     raise RuntimeError(_RUNTIME_ERROR)
+
+
+def import_func(name: str, returns: type | None = None, args: list[type] | None = None) -> Callable[..., Any]:
+    registry = load_registry()
+    export = registry.get("exports", {}).get(name)
+    if export is None:
+        raise RuntimeError(f"SuperCode import resolution failed: export `{name}` was not found.")
+    if export.get("kind") == "c_export":
+        module = _load_module(export["module_path"])
+        return getattr(module, export["callable"])
+    if export.get("kind") == "python_export":
+        module = _load_module(export["module_path"])
+        return getattr(module, export["callable"])
+    raise RuntimeError(f"SuperCode import resolution failed: unsupported export backend for `{name}`.")
+
+
+def super_export(func: Callable[..., Any]) -> Callable[..., Any]:
+    setattr(func, "__supercode_export__", True)
+    return func
 
 
 def super_class(name: str, *args: Any, **kwargs: Any) -> Any:
