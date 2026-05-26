@@ -1,11 +1,13 @@
 # SuperCode
 
-SuperCode is an experimental AI hole-filling compiler/interpreter frontend.
+SuperCode is an experimental deterministic glue frontend for compilers, interpreters, generated implementations, and cross-language bindings, with optional AI hole filling.
 
-It does not rewrite your source code.
-It only fills explicit `super_func`, `super_export_func`, `super_struct`, and `super_class` holes, stores generated implementations under `.supercode/`, and links or imports them back through `super`.
+`super` is the glue. The LLM only fills missing holes.
 
-The fixed SuperCode v1 syntax and deterministic glue rules are documented in [docs/syntax.md](/home/jesse/code/SuperCode/docs/syntax.md).
+SuperCode does not rewrite your source code. It tracks explicit `super_func`, `super_export_func`, `super_import_func`, `super_struct`, `super_class`, `sc.super_func`, and `sc.import_func` forms, resolves existing implementations first, and only asks an implementation provider when something is missing.
+
+Stable syntax and command semantics are documented in [docs/syntax.md](docs/syntax.md).
+
 
 ## Warning
 
@@ -15,6 +17,15 @@ The fixed SuperCode v1 syntax and deterministic glue rules are documented in [do
 - Generated code may be wrong.
 - Inspect `.supercode/impl` before trusting generated code.
 - Do not use SuperCode for production, security-critical, financial, safety-critical, or unreviewed code paths.
+
+## How It Works
+
+SuperCode has two separate layers:
+
+- **Deterministic core**: scan, resolve, reuse, build, link, import, run, inspect, and verify.
+- **Implementation providers**: LLM, mock, handwritten, generated, or external implementations.
+
+The default rule is simple: existing implementations are reused. Missing implementations may be generated. `--offline` forbids generation and fails clearly when an implementation is missing.
 
 ## Installation
 
@@ -62,6 +73,29 @@ export OPENROUTER_API_KEY="your_api_key_here"
 # edit supercode.toml if needed
 super examples/c_local_func/main.c -o /tmp/sc-local
 /tmp/sc-local
+super inspect
+```
+
+## No-AI / Offline Glue
+
+AI is not required when implementations already exist or are handwritten and registered.
+
+```bash
+super build examples/no_ai/c_export/main.c -o /tmp/sc-c --offline
+/tmp/sc-c
+
+super build examples/no_ai/cpp_import/main.cpp -o /tmp/sc-cpp --offline
+/tmp/sc-cpp
+
+super build examples/no_ai/python_import/main.py --offline
+```
+
+These examples use a handwritten C implementation registered in `examples/no_ai/supercode.toml`. The same export is called from C, C++, and Python without an API key, without `--mock`, and without runtime LLM calls.
+
+Use `super verify` and `super inspect` to audit resolved implementations:
+
+```bash
+super verify examples/no_ai/c_export/main.c
 super inspect
 ```
 
@@ -299,6 +333,7 @@ clang++ -std=c++17 -fsyntax-only \
 
 ## What SuperCode Does Not Do
 
+- It does not require an LLM when a matching handwritten or generated implementation already exists.
 - It does not rewrite source files.
 - It does not copy full source files into `.supercode`.
 - It does not fix syntax errors.
@@ -316,6 +351,10 @@ Supported:
 - C++ `super_class`
 - Python local `sc.super_func`
 - Python `ctypes` binding for exported C functions
+- C/C++ `super_import_func` for registered exports
+- Python `sc.import_func` for registered exports
+- no-AI offline C/C++/Python glue examples
+- `super build`, `super generate`, and `super verify`
 - clangd / pyright initialization through `super init`
 
 Not yet supported or still experimental:

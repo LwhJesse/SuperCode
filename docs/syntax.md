@@ -1,5 +1,24 @@
 # SuperCode v1 Syntax
 
+## Scope
+
+This document defines the stable SuperCode syntax and command semantics. It is not a tutorial and not a prompt guide.
+
+SuperCode has one central rule: `super` is deterministic glue; implementation providers only fill missing implementations. Existing generated, handwritten, or external implementations must be resolved and reused before any AI provider is considered.
+
+The syntax below is intended to remain stable for v1:
+
+- C/C++ local holes: `super_func(ReturnType, args...)`
+- C/C++ exports: `super_export_func(Name, ReturnType, typed params...)`
+- C/C++ imports: `super_import_func(Name, ReturnType, typed params...)`
+- C opaque objects: `super_struct(Name)`
+- C++ managed classes: `super_class(Name)`
+- Python local holes: `sc.super_func(ReturnType, *args)`
+- Python exports: `@sc.super_export`
+- Python imports: `sc.import_func("Name", ...)`
+
+AI-facing intent comments are optional metadata for generation. They do not define offline build semantics.
+
 SuperCode v1 fixes the non-AI surface syntax and the deterministic glue rules.
 
 `super` is the glue.
@@ -124,3 +143,14 @@ SuperCode v1 distinguishes four implementation states:
 
 Generated implementations live under `.supercode/impl` or `.supercode/py_impl`.
 Handwritten implementations stay in normal project source directories and are registered through `supercode.toml`.
+
+## Command Semantics Summary
+
+- `super <file>`: resolve existing implementations first; generate only when missing and allowed.
+- `super build <file>`: deterministic reuse-only build by default.
+- `super build <file> --generate-missing`: build and allow provider generation for missing implementations.
+- `super generate <file>`: generate missing implementations only; do not build or run.
+- `super generate <file> --regenerate`: regenerate generated implementations; do not overwrite handwritten implementations silently.
+- `super <file> --offline`: forbid LLM/mock generation and fail if an implementation is missing.
+- `super verify`: verify source, holes, manifest entries, implementations, hashes, and generated glue.
+- `super inspect`: show resolved artifacts and whether each implementation is generated, handwritten, external, reused, or missing.
