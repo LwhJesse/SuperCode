@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "supercode-cli"
-version = "0.1.1"
+version = "0.2.0"
 description = "SuperCode: explicit-hole AI implementation generator and minimal super frontend"
 readme = "README.md"
 license = "MIT"
