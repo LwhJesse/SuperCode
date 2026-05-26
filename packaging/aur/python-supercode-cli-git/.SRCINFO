@@ -1,5 +1,5 @@
-pkgbase = python-supercode-git
-	pkgdesc = Explicit-hole AI implementation generator and minimal super frontend
+pkgbase = python-supercode-cli-git
+	pkgdesc = Experimental AI hole-filling compiler/interpreter frontend
 	pkgver = 0.1.0.r0.g0000000
 	pkgrel = 1
 	url = https://github.com/LwhJesse/SuperCode
@@ -14,4 +14,4 @@ pkgbase = python-supercode-git
 	source = git+https://github.com/LwhJesse/SuperCode.git
 	sha256sums = SKIP
 
-pkgname = python-supercode-git
+pkgname = python-supercode-cli-git

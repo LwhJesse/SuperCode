@@ -19,19 +19,19 @@ It only fills explicit `super_func`, `super_export_func`, `super_struct`, and `s
 Arch Linux:
 
 ```bash
-yay -S python-supercode-git
+yay -S python-supercode-cli-git
 ```
 
 Linux / macOS:
 
 ```bash
-uv tool install supercode
+uv tool install supercode-cli
 ```
 
 Alternative:
 
 ```bash
-pipx install supercode
+pipx install supercode-cli
 ```
 
 If you know exactly how you want to manage your Python environment, you can also install with `pip`, but `uv tool install` / `pipx` / AUR are the recommended user-facing paths.
@@ -45,8 +45,8 @@ super init
 
 Names:
 
-- PyPI package name: `supercode`
-- AUR package name: `python-supercode-git`
+- PyPI distribution name: `supercode-cli`
+- AUR package name: `python-supercode-cli-git`
 - CLI command: `super`
 - Python import name: `supercode`
 - C header: `supercode.h`
@@ -336,4 +336,3 @@ Not yet supported or still experimental:
 - Generated implementations do not include user source files.
 - Generated implementations do not copy user wrapper functions.
 - AI generation is limited to explicit holes.
-
