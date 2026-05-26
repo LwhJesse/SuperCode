@@ -1,0 +1,21 @@
+.supercode/
+dist/
+build/
+*.egg-info/
+__pycache__/
+.pytest_cache/
+.venv/
+venv/
+*.pyc
+*.pyo
+*.so
+*.dylib
+*.dll
+*.exe
+/tmp/
+*.log
+
+# Local project-init outputs
+.clangd
+pyrightconfig.json
+supercode.toml

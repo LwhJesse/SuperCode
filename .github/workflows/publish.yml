@@ -1,0 +1,33 @@
+name: publish
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install build tooling
+        run: python -m pip install --upgrade build twine
+      - name: Build
+        run: python -m build
+      - name: Check artifacts
+        run: twine check dist/*
+
+  publish:
+    if: false
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Trusted Publishing placeholder
+        run: |
+          echo "Enable this job after PyPI Trusted Publishing is configured."

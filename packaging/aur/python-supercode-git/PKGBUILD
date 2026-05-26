@@ -1,0 +1,26 @@
+pkgname=python-supercode-git
+pkgver=0.1.0.r0.g0000000
+pkgrel=1
+pkgdesc="Explicit-hole AI implementation generator and minimal super frontend"
+arch=('any')
+url="https://github.com/LwhJesse/SuperCode"
+license=('MIT')
+depends=('python')
+makedepends=('git' 'python-build' 'python-installer' 'python-wheel' 'python-setuptools')
+source=("git+${url}.git")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd "${srcdir}/supercode"
+  git describe --long --tags --always 2>/dev/null | sed 's/^v//;s/-/.r/;s/-/./'
+}
+
+build() {
+  cd "${srcdir}/supercode"
+  python -m build --wheel --no-isolation
+}
+
+package() {
+  cd "${srcdir}/supercode"
+  python -m installer --destdir="${pkgdir}" dist/*.whl
+}

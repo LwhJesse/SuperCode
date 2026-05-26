@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "supercode"
+version = "0.1.0"
+description = "SuperCode: explicit-hole AI implementation generator and minimal super frontend"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.scripts]
+super = "supercode.cli:main"
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+include = ["supercode*"]
+
+[tool.setuptools.package-data]
+supercode = ["resources/include/*.h", "resources/include/*.hpp"]
